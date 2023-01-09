@@ -5,7 +5,7 @@ use anyhow::Result;
 
 use crate::operation::Operation;
 
-type BoxOperation<Request, Response> = Box<dyn Operation<Request, Response>>;
+type BoxOperationFactory = Box<fn() -> Box<dyn Operation>>;
 
 /// Registry of operations.
 ///
@@ -17,11 +17,10 @@ type BoxOperation<Request, Response> = Box<dyn Operation<Request, Response>>;
 /// # struct OperationA;
 /// #
 /// # #[async_trait::async_trait]
-/// # impl Operation<Request, Response> for OperationA {
+/// # impl Operation for OperationA {
 /// #     fn query(&self) -> String { unimplemented!()}
 /// #     fn operation_id(&self) -> String { "ec438c4eba4f52bca3692c22884f329a9678baf10c7753b6f3d20071cfe62c93".to_string() }
-/// #     async fn hook_request(&self, mut request: Request) -> Request { unimplemented!() }
-/// #     async fn hook_response(&self, mut response: Response) -> Response { unimplemented!() }
+/// #     async fn resolve(self) -> serde_json::Value { unimplemented!()}
 /// # }
 /// #
 /// # #[tokio::main]
@@ -33,11 +32,11 @@ type BoxOperation<Request, Response> = Box<dyn Operation<Request, Response>>;
 ///     let new_request = operation.hook_request(request).await;
 /// # }
 /// ```
-pub struct Registry<Request, Response> {
-    inner: Arc<RwLock<HashMap<String, BoxOperation<Request, Response>>>>,
+pub struct Registry {
+    inner: Arc<RwLock<HashMap<String, BoxOperationFactory>>>,
 }
 
-impl<Request, Response> Default for Registry<Request, Response> {
+impl Default for Registry {
     fn default() -> Self {
         Self {
             inner: Arc::new(RwLock::new(HashMap::new())),
@@ -45,7 +44,7 @@ impl<Request, Response> Default for Registry<Request, Response> {
     }
 }
 
-impl<Request, Response> Clone for Registry<Request, Response> {
+impl Clone for Registry {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -53,10 +52,10 @@ impl<Request, Response> Clone for Registry<Request, Response> {
     }
 }
 
-impl<Request, Response> Registry<Request, Response> {
+impl Registry {
     pub async fn register<O>(self) -> Self
     where
-        O: Operation<Request, Response> + Default + 'static,
+        O: Operation + Default + 'static,
     {
         let v = O::default();
         self.inner
@@ -67,14 +66,11 @@ impl<Request, Response> Registry<Request, Response> {
                     std::any::type_name::<O>()
                 )
             })
-            .insert(v.operation_id(), Box::new(v));
+            .insert(v.operation_id(), Box::new(|| Box::new(O::default())));
         self
     }
 
-    pub async fn resolve(
-        &self,
-        operation_id: &str,
-    ) -> Result<Box<dyn Operation<Request, Response>>> {
+    pub async fn resolve(&self, operation_id: &str) -> Result<Box<dyn Operation>> {
         self.inner
             .read()
             .unwrap_or_else(|_| {
@@ -84,7 +80,7 @@ impl<Request, Response> Registry<Request, Response> {
                 )
             })
             .get(operation_id)
-            .map(|v| v.clone_box())
+            .map(|factory| factory())
             .ok_or_else(|| {
                 anyhow::anyhow!(
                     "Registry: resolve(operation_id: `{}`): operation not found",

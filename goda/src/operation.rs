@@ -8,7 +8,7 @@
 /// struct OperationA;
 ///
 /// #[async_trait::async_trait]
-/// impl Operation<Request, Response> for OperationA {
+/// impl Operation for OperationA {
 ///     fn query(&self) -> String {
 ///         r#"query HelloWorld {
 ///   hello
@@ -20,35 +20,27 @@
 ///         "ec438c4eba4f52bca3692c22884f329a9678baf10c7753b6f3d20071cfe62c93".to_string()
 ///     }
 ///
-///     async fn hook_request(&self, mut request: async_graphql::Request) -> async_graphql::Request {
-///         request
-///     }
-///   
-///     async fn hook_response(
-///         &self,
-///         mut response: async_graphql::Response,
-///     ) -> async_graphql::Response {
-///         response
+///     async fn resolve(self) -> serde_json::Value {
+///         todo!()
 ///     }
 /// }
 /// ```
 #[async_trait::async_trait]
-pub trait Operation<Request, Response>: OperationClone<Request, Response> + Send + Sync {
+pub trait Operation: OperationClone + Send + Sync {
     fn query(&self) -> String;
     fn operation_id(&self) -> String;
-    async fn hook_request(&self, request: Request) -> Request;
-    async fn hook_response(&self, response: Response) -> Response;
+    async fn resolve(&self) -> serde_json::Value;
 }
 
-pub trait OperationClone<Request, Response> {
-    fn clone_box(&self) -> Box<dyn Operation<Request, Response>>;
+pub trait OperationClone {
+    fn clone_box(&self) -> Box<dyn Operation>;
 }
 
-impl<T, Request, Response> OperationClone<Request, Response> for T
+impl<Target> OperationClone for Target
 where
-    T: 'static + Operation<Request, Response> + Clone,
+    Target: 'static + Operation + Clone,
 {
-    fn clone_box(&self) -> Box<dyn Operation<Request, Response>> {
+    fn clone_box(&self) -> Box<dyn Operation> {
         Box::new(self.clone())
     }
 }

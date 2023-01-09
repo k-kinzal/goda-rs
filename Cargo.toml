@@ -3,4 +3,5 @@
 members = [
     "examples/simple",
     "goda",
+    "goda-gen",
 ]

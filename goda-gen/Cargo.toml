@@ -1,0 +1,11 @@
+[package]
+name = "goda-gen"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+apollo-compiler = "0.5.0"
+quote = "1.0.23"
+rust-format = "0.3.4"
